@@ -20,8 +20,6 @@ Your project is live at:
 
 Continue building your app on:
 
-**[https://v0.dev/chat/projects/RgZarzTnfss](https://v0.dev/chat/projects/RgZarzTnfss)**
-
 ## How It Works
 
 1. Create and modify your project using [v0.dev](https://v0.dev)
