@@ -1,111 +1,90 @@
-// A simplified and more robust OpenAI client implementation that uses server API
+// This is a client-side wrapper that uses the secure API endpoint
+
 export class OpenAIClient {
-  constructor() {
-    console.log("[OpenAI] Client initialized to use server API")
+  private resumeContent: string | null = null
+
+  constructor(apiKey: string) {
+    // We don't need the API key anymore as we're using a server endpoint
+    console.log("[OpenAIClient] Initialized")
+
+    // Try to load resume content from session storage
+    this.loadResumeFromSessionStorage()
   }
 
-  async generateResponse(question: string, onChunk: (text: string) => void): Promise<string> {
-    // Validate question
-    if (!question) {
-      const errorMsg = "Invalid question: Question is undefined or null"
-      console.error(`[OpenAI] ${errorMsg}`)
-      onChunk(errorMsg)
-      return errorMsg
-    }
-
-    // Ensure question is a string and trim it
-    const safeQuestion = String(question).trim()
-    if (safeQuestion === "") {
-      const errorMsg = "Invalid question: Question is empty"
-      console.error(`[OpenAI] ${errorMsg}`)
-      onChunk(errorMsg)
-      return errorMsg
-    }
-
-    console.log(`[OpenAI] Generating response for: "${safeQuestion}"`)
-
+  private loadResumeFromSessionStorage() {
     try {
-      // Use our server API endpoint instead of direct OpenAI access
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ question: safeQuestion }),
-      })
-
-      if (!response.ok) {
-        let errorMsg = `API error: ${response.status} ${response.statusText}`
-        try {
-          const errorData = await response.json()
-          console.error(`[OpenAI] ${errorMsg}`, errorData)
-          if (errorData && errorData.error) {
-            errorMsg += ` - ${errorData.error}`
-          }
-        } catch (e) {
-          console.error(`[OpenAI] Failed to parse error response:`, e)
+      const storedResume = sessionStorage.getItem("userResume")
+      if (storedResume) {
+        const resumeData = JSON.parse(storedResume)
+        if (resumeData.content) {
+          this.resumeContent = resumeData.content
+          console.log("[OpenAIClient] Resume content loaded from session storage")
         }
-
-        onChunk(errorMsg)
-        return errorMsg
       }
-
-      const data = await response.json()
-      const answer = data.answer || "No response received"
-
-      // Simulate streaming by sending chunks of the response
-      const words = answer.split(" ")
-      let currentResponse = ""
-
-      for (let i = 0; i < words.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 30))
-        currentResponse = words.slice(0, i + 1).join(" ")
-        onChunk(currentResponse)
-      }
-
-      console.log(`[OpenAI] Response generated: "${answer.substring(0, 100)}..."`)
-      return answer
     } catch (error) {
-      const errorMsg = `Error generating response: ${error instanceof Error ? error.message : String(error)}`
-      console.error(`[OpenAI] ${errorMsg}`)
-      console.error("[OpenAI] Error details:", error)
-      onChunk(errorMsg)
-      return errorMsg
+      console.error("[OpenAIClient] Error loading resume from session storage:", error)
     }
   }
 
-  // Fallback method that uses a mock response when the API fails
-  async generateFallbackResponse(question: string, onChunk: (text: string) => void): Promise<string> {
-    console.log(`[OpenAI] Using fallback response for: "${question}"`)
+  setResumeContent(content: string) {
+    this.resumeContent = content
+    console.log("[OpenAIClient] Resume content set manually")
+  }
 
-    // Generate a personalized response based on the question
-    const fallbackResponse = `Based on your resume and experience, here's how I would answer the question about "${question.substring(0, 50)}${question.length > 50 ? "..." : ""}":
-
-In my previous role at [Your Most Recent Company], I encountered a similar situation. I was tasked with [relevant responsibility related to the question]. 
-
-To address this, I first analyzed the requirements carefully and developed a strategic approach. I leveraged my skills in [relevant skill from your resume] to implement a solution that [describe positive outcome].
-
-The result was [quantifiable achievement if possible, e.g., "a 30% increase in efficiency" or "successful completion ahead of schedule"]. This experience demonstrates my ability to [relevant quality or skill the interviewer is likely looking for].
-
-Would you like me to elaborate on any specific aspect of this experience?`
-
+  async generateResponseWithContext(
+    query: string,
+    conversationHistory: Array<{ role: "user" | "assistant"; content: string }>,
+    onChunk: (chunk: string) => void,
+  ): Promise<string> {
     try {
-      // Simulate streaming
-      const words = fallbackResponse.split(" ")
-      let currentResponse = ""
+      console.log("[OpenAIClient] Generating response with context")
 
-      for (let i = 0; i < words.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 50))
-        currentResponse = words.slice(0, i + 1).join(" ")
-        onChunk(currentResponse)
+      // Check if we need to refresh resume content from session storage
+      if (!this.resumeContent) {
+        this.loadResumeFromSessionStorage()
       }
 
-      return fallbackResponse
+      // Prepare system message with resume context if available
+      let systemMessage = "You are an AI interview coach helping with job interview preparation."
+
+      if (this.resumeContent) {
+        // Extract key information from resume to avoid token limits
+        const resumeExcerpt =
+          this.resumeContent.length > 2000 ? this.resumeContent.substring(0, 2000) + "..." : this.resumeContent
+
+        systemMessage = `You are an AI interview coach helping with job interview preparation. 
+Use the following resume information to personalize your responses and provide relevant advice:
+
+RESUME CONTENT:
+${resumeExcerpt}
+
+When answering questions, refer to the candidate's experience and skills from their resume when relevant. 
+Tailor your advice to their background, but don't explicitly mention that you're using their resume unless asked.`
+      }
+
+      const messages = [
+        { role: "system" as const, content: systemMessage },
+        ...conversationHistory,
+        { role: "user" as const, content: query },
+      ]
+
+      // Use the askGPT function from chat-client.ts which now uses a secure API endpoint
+      const generator = askGPT(messages, "gpt4o")
+
+      let fullResponse = ""
+
+      for await (const chunk of generator) {
+        fullResponse += chunk
+        onChunk(fullResponse)
+      }
+
+      return fullResponse
     } catch (error) {
-      console.error("[OpenAI] Error in fallback response:", error)
-      const errorMessage = "Sorry, I encountered an error generating a response. Please try again."
-      onChunk(errorMessage)
-      return errorMessage
+      console.error("[OpenAIClient] Error generating response:", error)
+      throw new Error(`Failed to generate response: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 }
+
+// Import the askGPT function
+import { askGPT } from "./chat-client"

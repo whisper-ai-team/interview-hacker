@@ -4,6 +4,7 @@ export class DeepgramTranscriber {
   private audioContext: AudioContext | null = null
   private audioProcessor: ScriptProcessorNode | null = null
   private apiKey: string
+  private onTranscriptCallback: ((text: string) => void) | null = null
   private onStatusCallback: ((status: string, isError?: boolean) => void) | null = null
   private isConnected = false
   private reconnectAttempts = 0
@@ -18,17 +19,25 @@ export class DeepgramTranscriber {
   private transcriptBuffer = ""
   private processingInterval: NodeJS.Timeout | null = null
   private onProcessedTranscriptCallback: ((text: string) => void) | null = null
-  private onContinuousTranscriptCallback: ((text: string) => void) | null = null
-  private wordCountThreshold = 3 // Minimum words needed to trigger a response
-  private isProcessingQueued = false
-  private silenceTimeout: NodeJS.Timeout | null = null
-  private lastSpeechTime = 0
-  private silenceThreshold = 2000 // 2 seconds of silence to consider speech complete
-  private continuousMode = true // Enable continuous mode by default
+  private rollingTranscriptWindow = ""
+  private rollingWindowDuration = 30000 // 30 seconds in milliseconds
+  private lastProcessTime = 0
+  private onRollingTranscriptCallback: ((text: string) => void) | null = null
+  private processingTimer: NodeJS.Timeout | null = null
 
   constructor(apiKey: string) {
     this.apiKey = apiKey
     console.log("[Deepgram] Initialized with API key:", apiKey ? "API key provided" : "No API key")
+  }
+
+  setRollingTranscriptCallback(callback: (text: string) => void) {
+    this.onRollingTranscriptCallback = callback
+  }
+
+  getTimeUntilNextProcess(): number {
+    if (!this.lastProcessTime) return this.rollingWindowDuration
+    const elapsed = Date.now() - this.lastProcessTime
+    return Math.max(0, this.rollingWindowDuration - elapsed)
   }
 
   setStatusCallback(callback: (status: string, isError?: boolean) => void) {
@@ -43,21 +52,6 @@ export class DeepgramTranscriber {
     this.onProcessedTranscriptCallback = callback
   }
 
-  setContinuousTranscriptCallback(callback: (text: string) => void) {
-    this.onContinuousTranscriptCallback = callback
-    this.updateStatus("Continuous transcript callback set")
-  }
-
-  setWordCountThreshold(threshold: number) {
-    this.wordCountThreshold = threshold
-    this.updateStatus(`Word count threshold set to ${threshold}`)
-  }
-
-  setContinuousMode(enabled: boolean) {
-    this.continuousMode = enabled
-    this.updateStatus(`Continuous mode ${enabled ? "enabled" : "disabled"}`)
-  }
-
   private updateStatus(message: string, isError = false) {
     console.log(`[Deepgram] ${message}`)
     if (this.onStatusCallback) {
@@ -65,8 +59,9 @@ export class DeepgramTranscriber {
     }
   }
 
-  async startWithStream(stream: MediaStream) {
+  async startWithStream(stream: MediaStream, onTranscript: (text: string) => void) {
     try {
+      this.onTranscriptCallback = onTranscript
       this.stream = stream
       this.updateStatus("Starting transcription with stream")
 
@@ -123,30 +118,28 @@ export class DeepgramTranscriber {
           this.onAudioLevelCallback(this.audioLevel)
         }
 
-        // Detect speech activity
-        if (this.audioLevel > 10) {
-          this.lastSpeechTime = Date.now()
-
-          // Reset silence timeout if it exists
-          if (this.silenceTimeout) {
-            clearTimeout(this.silenceTimeout)
-            this.silenceTimeout = null
-          }
-        } else if (this.transcriptBuffer && this.transcriptBuffer.trim() && !this.silenceTimeout) {
-          // If we have some transcript and audio level is low, start silence timer
-          this.silenceTimeout = setTimeout(() => {
-            // If we have enough words and silence is detected, process the transcript
-            const wordCount = this.countWords(this.transcriptBuffer)
-            if (wordCount >= this.wordCountThreshold && !this.isProcessingQueued) {
-              this.processTranscript()
-            }
-          }, this.silenceThreshold)
+        // Log audio level periodically
+        if (Date.now() % 3000 < 50) {
+          console.log(`[Deepgram] Audio level: ${this.audioLevel}%`)
         }
 
         // Only send data if we have a connection
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
           const inputData = e.inputBuffer.getChannelData(0)
 
+          // Check if there's actual audio (not just silence)
+          let hasAudio = false
+          let maxAmplitude = 0
+          for (let i = 0; i < inputData.length; i++) {
+            const amplitude = Math.abs(inputData[i])
+            maxAmplitude = Math.max(maxAmplitude, amplitude)
+            if (amplitude > 0.01) {
+              hasAudio = true
+              break
+            }
+          }
+
+          // Always send data, but log if we detect audio
           // Convert float32 to int16
           const pcmData = new Int16Array(inputData.length)
           for (let i = 0; i < inputData.length; i++) {
@@ -160,13 +153,18 @@ export class DeepgramTranscriber {
           // Send audio data to Deepgram
           this.socket.send(pcmData.buffer)
           this.lastMessageTime = Date.now()
+
+          // Log periodically if we're detecting audio
+          if (hasAudio && Date.now() % 2000 < 50) {
+            console.log(`[Deepgram] Sending audio data with max amplitude: ${maxAmplitude.toFixed(4)}`)
+          }
         }
       }
 
       this.updateStatus("Audio processing setup complete")
 
-      // Set up interval to check transcript periodically
-      this.setupProcessingInterval()
+      // Set up timer for processing the rolling transcript window
+      this.setupRollingTranscriptTimer()
 
       // Send a test transcript after 5 seconds if we haven't received any
       setTimeout(() => {
@@ -183,87 +181,34 @@ export class DeepgramTranscriber {
     }
   }
 
-  private setupProcessingInterval() {
-    // Clear any existing interval
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval)
+  private setupRollingTranscriptTimer() {
+    // Clear any existing timer
+    if (this.processingTimer) {
+      clearInterval(this.processingTimer)
     }
 
-    // Process transcript every 200ms for more responsiveness in continuous mode
-    this.processingInterval = setInterval(() => {
-      if (this.transcriptBuffer && this.transcriptBuffer.trim()) {
-        try {
-          // Count words in the transcript
-          const wordCount = this.countWords(this.transcriptBuffer)
+    // Process transcript every 30 seconds
+    this.processingTimer = setInterval(() => {
+      if (this.rollingTranscriptWindow && this.rollingTranscriptWindow.trim()) {
+        this.lastProcessTime = Date.now()
 
-          // In continuous mode, send updates as they come in
-          if (this.continuousMode && this.onContinuousTranscriptCallback) {
-            this.onContinuousTranscriptCallback(this.transcriptBuffer)
-          }
-
-          // Check if we've reached the threshold and not already queued processing
-          if (wordCount >= this.wordCountThreshold && !this.isProcessingQueued) {
-            // If there's been silence for a while, process the transcript
-            if (Date.now() - this.lastSpeechTime > this.silenceThreshold) {
-              this.processTranscript()
-            }
-          }
-        } catch (error) {
+        // Call the callback with the current rolling window
+        if (this.onRollingTranscriptCallback) {
+          this.onRollingTranscriptCallback(this.rollingTranscriptWindow)
           this.updateStatus(
-            `Error processing transcript: ${error instanceof Error ? error.message : String(error)}`,
-            true,
+            `Processed rolling transcript window: "${this.rollingTranscriptWindow.substring(0, 50)}..."`,
+          )
+        }
+
+        // Don't clear the rolling window - we want to maintain context
+        // but we could trim it if it gets too long
+        if (this.rollingTranscriptWindow.length > 1000) {
+          this.rollingTranscriptWindow = this.rollingTranscriptWindow.substring(
+            this.rollingTranscriptWindow.length - 1000,
           )
         }
       }
-    }, 200) // More frequent updates for continuous mode
-  }
-
-  private processTranscript() {
-    this.isProcessingQueued = true
-
-    // Format the transcript as a question if needed
-    const processedText = this.formatAsQuestion(this.transcriptBuffer)
-
-    // Call the callback with the processed text
-    if (this.onProcessedTranscriptCallback && processedText && processedText.trim()) {
-      this.onProcessedTranscriptCallback(processedText)
-      this.updateStatus(`Processed transcript: "${processedText}"`)
-    }
-
-    // Reset for next question
-    this.transcriptBuffer = ""
-    this.isProcessingQueued = false
-  }
-
-  private countWords(text: string): number {
-    if (!text || typeof text !== "string") return 0
-    return text.trim().split(/\s+/).length
-  }
-
-  private formatAsQuestion(text: string): string {
-    // Safety check - ensure text is a string and not empty
-    if (!text) {
-      console.error(`[Deepgram] Invalid text for formatting: ${text}`)
-      return "Could you explain more about that?" // Default fallback question
-    }
-
-    // Convert to string if it's not already
-    const safeText = String(text).trim()
-
-    if (safeText === "") {
-      console.error("[Deepgram] Empty text for formatting")
-      return "Could you explain more about that?" // Default fallback question
-    }
-
-    // Trim the text
-    let processedText = safeText
-
-    // Always add a question mark at the end if it doesn't have one
-    if (!processedText.endsWith("?")) {
-      processedText = processedText + "?"
-    }
-
-    return processedText
+    }, this.rollingWindowDuration)
   }
 
   private async connectToDeepgram() {
@@ -335,15 +280,19 @@ export class DeepgramTranscriber {
             const transcript = data.channel.alternatives[0].transcript
 
             if (transcript) {
-              // Update the transcript buffer
+              // Add to rolling window
+              this.rollingTranscriptWindow = transcript
+
+              // Add to buffer
               this.transcriptBuffer = transcript
+
+              // Also send to real-time display
+              if (this.onTranscriptCallback) {
+                this.onTranscriptCallback(transcript)
+              }
+
               this.lastTranscriptTime = Date.now()
               this.updateStatus(`Received transcript: "${transcript}"`)
-
-              // In continuous mode, immediately send the update
-              if (this.continuousMode && this.onContinuousTranscriptCallback) {
-                this.onContinuousTranscriptCallback(transcript)
-              }
             }
           } else if (data.type === "KeepAliveResponse") {
             this.updateStatus("Received keep-alive response")
@@ -458,9 +407,9 @@ export class DeepgramTranscriber {
       this.processingInterval = null
     }
 
-    if (this.silenceTimeout) {
-      clearTimeout(this.silenceTimeout)
-      this.silenceTimeout = null
+    if (this.processingTimer) {
+      clearInterval(this.processingTimer)
+      this.processingTimer = null
     }
   }
 
