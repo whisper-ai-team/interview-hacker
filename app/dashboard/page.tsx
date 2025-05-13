@@ -25,70 +25,55 @@ export default function DashboardPage() {
   const [isLoadingCredits, setIsLoadingCredits] = useState(false)
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/login")
-    }
+    if (status === "unauthenticated") router.push("/login")
   }, [status, router])
 
-  // Separate effect for fetching user credits
   useEffect(() => {
+    if (status !== "authenticated") return
     const fetchUserCredits = async () => {
-      if (status !== "authenticated") return
-
+      setIsLoadingCredits(true)
       try {
-        setIsLoadingCredits(true)
-        const response = await fetch("/api/user/credits")
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch user credits")
-        }
-
-        const data = await response.json()
-        setUserCredits(data.credits)
+        const res = await fetch("/api/user/credits")
+        if (!res.ok) throw new Error("Failed to fetch credits")
+        const { credits } = await res.json()
+        setUserCredits(credits)
       } catch (err) {
-        console.error("Error fetching user credits:", err)
+        console.error(err)
       } finally {
         setIsLoadingCredits(false)
       }
     }
-
     fetchUserCredits()
   }, [status])
 
   useEffect(() => {
+    if (status !== "authenticated") return
     const fetchData = async () => {
-      if (status !== "authenticated") return
-
+      setIsLoading(true)
+      setError(null)
       try {
-        setIsLoading(true)
-        setError(null)
-
-        // Fetch meetings
-        const meetingsRes = await fetch("/api/meetings")
-        if (!meetingsRes.ok) throw new Error("Failed to fetch meetings")
-        const meetingsData = await meetingsRes.json()
-
-        // Fetch resumes
-        const resumesRes = await fetch("/api/resume")
-        if (!resumesRes.ok) throw new Error("Failed to fetch resumes")
-        const resumesData = await resumesRes.json()
-
-        setMeetings(meetingsData)
-        setResumes(resumesData.resumes || [])
+        const [mRes, rRes] = await Promise.all([
+          fetch("/api/meetings"),
+          fetch("/api/resume"),
+        ])
+        if (!mRes.ok || !rRes.ok) throw new Error("Failed to load")
+        const mData = await mRes.json()
+        const rData = await rRes.json()
+        setMeetings(mData)
+        setResumes(rData.resumes || [])
       } catch (err) {
-        console.error("Error fetching dashboard data:", err)
+        console.error(err)
         setError("Failed to load dashboard data. Please try again.")
       } finally {
         setIsLoading(false)
       }
     }
-
     fetchData()
   }, [status])
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="flex items-center justify-center h-screen bg-indigo-50">
         <LoadingSpinner size="lg" text="Loading dashboard..." />
       </div>
     )
@@ -96,136 +81,139 @@ export default function DashboardPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+      <div className="container mx-auto px-4 py-12">
+        <Alert variant="destructive" className="max-w-xl mx-auto">
+          <AlertCircle className="h-5 w-5 text-red-500" />
+          <AlertTitle className="text-lg text-red-600">Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
     )
   }
 
-  if (status === "authenticated" && session?.user) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+  return session?.user ? (
+    <div className="min-h-screen bg-indigo-50 py-12">
+      <div className="container mx-auto max-w-screen-lg px-4">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-12 gap-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">Welcome back, {session.user.name || session.user.email}!</p>
+            <h1 className="text-4xl font-extrabold text-indigo-900">Dashboard</h1>
+            <p className="mt-1 text-indigo-700">
+              Welcome back, <span className="font-medium">{session.user.name || session.user.email}</span>!
+            </p>
           </div>
-
-          {/* Inline credits display instead of using the component */}
-          <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-100">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <Clock className="h-5 w-5 text-indigo-600 mr-2" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Your Credits</p>
-                    {isLoadingCredits ? (
-                      <div className="flex items-center mt-1">
-                        <LoadingSpinner size="sm" />
-                        <p className="text-sm text-gray-500 ml-2">Loading...</p>
-                      </div>
-                    ) : (
-                      <p className="text-xl font-bold text-indigo-700">{userCredits?.toLocaleString() || 0}</p>
-                    )}
+          <div className="flex items-center gap-4">
+            <Card className="w-44 rounded-xl shadow-md border border-indigo-200 bg-white">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <Clock className="h-5 w-5 text-indigo-500 mr-2" />
+                    <div>
+                      <p className="text-sm text-indigo-500">Your Credits</p>
+                      {isLoadingCredits ? (
+                        <div className="flex items-center mt-1">
+                          <LoadingSpinner size="sm" />
+                          <span className="ml-2 text-sm text-indigo-500">Loading...</span>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-2xl font-bold text-indigo-800">
+                          {userCredits?.toLocaleString() || "0"}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push("/pricing")}
+                    className="border-indigo-300 text-indigo-700 hover:bg-indigo-100 transition"
+                  >
+                    Buy
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push("/pricing")}
-                  className="ml-4 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
-                >
-                  Buy Credits
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            <Link href="/copilot" passHref>
+              <Button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white transition rounded-xl">
+                <Rocket className="h-4 w-4" />
+                Launch Copilot
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        {/* Add Launch Copilot button */}
-        <div className="mb-6">
-          <Link href="/copilot">
-            <Button className="bg-indigo-600 hover:bg-indigo-700">
-              <Rocket className="mr-2 h-4 w-4" />
-              Launch Interview Copilot
-            </Button>
-          </Link>
-        </div>
-
-        <Tabs defaultValue="meetings" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="meetings" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              <span>Interviews</span>
+        {/* Tabs */}
+        <Tabs defaultValue="meetings" className="space-y-6">
+          <TabsList className="bg-white p-1 rounded-xl shadow-sm border border-indigo-200">
+            <TabsTrigger
+              value="meetings"
+              className="flex-1 text-center py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:rounded-lg text-indigo-700 hover:bg-indigo-50 transition"
+            >
+              <Clock className="inline-block h-5 w-5 mr-1" />
+              Interviews
             </TabsTrigger>
-            <TabsTrigger value="resumes" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span>Resumes</span>
+            <TabsTrigger
+              value="resumes"
+              className="flex-1 text-center py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:rounded-lg text-indigo-700 hover:bg-indigo-50 transition"
+            >
+              <FileText className="inline-block h-5 w-5 mr-1" />
+              Resumes
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="meetings" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Interview Sessions</CardTitle>
-                <CardDescription>Start a new interview or continue an existing one.</CardDescription>
+          <TabsContent value="meetings" className="space-y-6">
+            <Card className="rounded-xl shadow-md border border-indigo-200 bg-white">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-2xl text-indigo-900">Interview Sessions</CardTitle>
+                <CardDescription className="text-indigo-600">
+                  Start a new interview or continue an existing one.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <NewMeetingButton />
-
-                  {meetings.length > 0 ? (
-                    <div className="space-y-4 mt-6">
-                      <MeetingsList meetings={meetings} />
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">You haven't created any interviews yet.</p>
-                      <p className="text-muted-foreground">Click the button above to get started.</p>
-                    </div>
-                  )}
-                </div>
+              <CardContent className="p-6 space-y-6">
+                <NewMeetingButton className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition" />
+                {meetings.length > 0 ? (
+                  <MeetingsList meetings={meetings} />
+                ) : (
+                  <div className="text-center py-12 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <p className="text-indigo-600">No interviews yet.</p>
+                    <p className="mt-1 text-indigo-500">Click above to get started.</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="resumes" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Resumes</CardTitle>
-                <CardDescription>Manage your resumes for personalized interview responses.</CardDescription>
+          <TabsContent value="resumes" className="space-y-6">
+            <Card className="rounded-xl shadow-md border border-indigo-200 bg-white">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-2xl text-indigo-900">Resumes</CardTitle>
+                <CardDescription className="text-indigo-600">
+                  Manage your resumes for personalized interview responses.
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Button onClick={() => router.push("/resume/new")} className="flex items-center gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add New Resume
-                  </Button>
-
-                  {resumes.length > 0 ? (
-                    <div className="space-y-4 mt-6">
-                      <ResumesList resumes={resumes} />
-                    </div>
-                  ) : (
-                    <div className="text-center py-8">
-                      <p className="text-muted-foreground">You haven't added any resumes yet.</p>
-                      <p className="text-muted-foreground">
-                        Adding a resume helps tailor interview responses to your experience.
-                      </p>
-                    </div>
-                  )}
-                </div>
+              <CardContent className="p-6 space-y-6">
+                <Button
+                  onClick={() => router.push("/resume/new")}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition"
+                >
+                  <Plus className="h-4 w-4" />
+                  Add New Resume
+                </Button>
+                {resumes.length > 0 ? (
+                  <ResumesList resumes={resumes} />
+                ) : (
+                  <div className="text-center py-12 bg-indigo-50 rounded-lg border border-indigo-100">
+                    <p className="text-indigo-600">No resumes added yet.</p>
+                    <p className="mt-1 text-indigo-500">
+                      Adding one helps tailor interview responses.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
-    )
-  }
-
-  return null
+    </div>
+  ) : null
 }

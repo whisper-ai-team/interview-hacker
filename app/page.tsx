@@ -9,6 +9,7 @@ import Link from "next/link"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { ArrowRight, Sparkles, Shield } from "lucide-react"
+import "./globals.css"
 
 export default async function Home() {
   const session = await getServerSession(authOptions)
