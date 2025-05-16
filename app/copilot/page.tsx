@@ -575,7 +575,7 @@ export default function CopilotPage() {
   useEffect(() => {
     // We no longer need to check for the Deepgram API key in the client
     // since we're using a server-side API route
-    const openaiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
+    const openaiKey = "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"
 
     setHasOpenAIKey(!!openaiKey)
 

@@ -1,64 +1,109 @@
 import { type NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
-import { OpenAIStream, StreamingTextResponse } from "ai"
 
-// Initialize OpenAI client securely on the server
+// Create an OpenAI API client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
+export const runtime = "nodejs"
+
 export async function POST(req: NextRequest) {
   try {
-    // Validate API key
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OpenAI API key is missing" }, { status: 500 })
-    }
+    const { messages, model = "gpt-4o", resumeContent } = await req.json()
 
-    // Parse request body
-    const { messages, model, resumeContent } = await req.json()
-
-    // Validate request data
+    // Validate the request
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "Invalid messages format" }, { status: 400 })
+      return NextResponse.json({ error: "Invalid request: messages must be an array" }, { status: 400 })
     }
 
-    // Prepare system message with resume context if available
-    let systemMessage =
-      messages.find((msg) => msg.role === "system")?.content ||
-      "You are an AI interview coach helping with job interview preparation."
-
-    if (resumeContent && !systemMessage.includes("RESUME INFORMATION")) {
-      // Extract key information from resume to avoid token limits
-      const resumeExcerpt = resumeContent.length > 2000 ? resumeContent.substring(0, 2000) + "..." : resumeContent
-
-      systemMessage = `You are an AI interview coach helping with job interview preparation. 
-Use the following resume information to personalize your responses and provide relevant advice:
-
-RESUME INFORMATION:
-${resumeExcerpt}
-
-When answering questions, refer to the candidate's experience and skills from their resume when relevant. 
-Tailor your advice to their background, but don't explicitly mention that you're using their resume unless asked.`
+    // Check if API key is available
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: "OpenAI API key not configured" }, { status: 500 })
     }
 
-    // Add system message to the beginning of messages array if it doesn't already have one
-    const messagesWithSystem =
-      messages[0]?.role === "system"
-        ? messages.map((msg, i) => (i === 0 ? { ...msg, content: systemMessage } : msg))
-        : [{ role: "system", content: systemMessage }, ...messages]
+    // If we have a message and context instead of messages array (for sendMessage function)
+    if (req.body && !messages && req.body.hasOwnProperty("message")) {
+      const { message, context } = await req.json()
 
-    // Create OpenAI request
-    const response = await openai.chat.completions.create({
-      model: model === "gemini" ? "gpt-4o" : "gpt-4o", // We're simulating Gemini with GPT-4o
-      messages: messagesWithSystem,
-      stream: true,
-    })
+      // Create a simple completion for non-streaming requests
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "system",
+            content: "You are an AI interview coach." + (resumeContent ? `\n\nResume: ${resumeContent}` : ""),
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      })
+
+      return NextResponse.json({
+        response: completion.choices[0]?.message?.content || "No response generated",
+      })
+    }
 
     // Create a streaming response
-    const stream = OpenAIStream(response)
-    return new StreamingTextResponse(stream)
+    const response = await openai.chat.completions.create({
+      model,
+      messages,
+      stream: true,
+      temperature: 0.7,
+      max_tokens: 1000,
+    })
+
+    // Create a TransformStream to handle the streaming response
+    const encoder = new TextEncoder()
+    const decoder = new TextDecoder()
+
+    const stream = new ReadableStream({
+      async start(controller) {
+        // Process each chunk from the OpenAI stream
+        for await (const chunk of response) {
+          // Extract the content from the chunk
+          const content = chunk.choices[0]?.delta?.content || ""
+
+          if (content) {
+            // Format as SSE (Server-Sent Events)
+            const sseMessage = `data: ${JSON.stringify({
+              choices: [{ delta: { content } }],
+            })}\n\n`
+
+            // Send the chunk to the client
+            controller.enqueue(encoder.encode(sseMessage))
+          }
+        }
+
+        // Signal the end of the stream
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+        controller.close()
+      },
+    })
+
+    // Return the stream with appropriate headers
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    })
   } catch (error) {
     console.error("Error in chat API route:", error)
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
+
+    // Determine the error message and status code
+    let errorMessage = "An error occurred during the API request"
+    let statusCode = 500
+
+    if (error instanceof OpenAI.APIError) {
+      errorMessage = error.message
+      statusCode = error.status || 500
+    } else if (error instanceof Error) {
+      errorMessage = error.message
+    }
+
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }

@@ -1,6 +1,8 @@
-// This is a client-side wrapper that uses the secure API endpoint
+// utils/openai-client.ts
 
-export class OpenAIClient {
+import { askGPT } from "@/utils/chat-client"
+
+class OpenAIClient {
   private resumeContent: string | null = null
 
   constructor(apiKey: string) {
@@ -69,13 +71,23 @@ Tailor your advice to their background, but don't explicitly mention that you're
       ]
 
       // Use the askGPT function from chat-client.ts which now uses a secure API endpoint
-      const generator = askGPT(messages, "gpt4o")
+      const generator = askGPT(messages, "gpt-4o")
 
       let fullResponse = ""
 
-      for await (const chunk of generator) {
-        fullResponse += chunk
-        onChunk(fullResponse)
+      try {
+        for await (const chunk of generator) {
+          if (chunk && !chunk.startsWith("Error:")) {
+            fullResponse += chunk
+            onChunk(fullResponse)
+          } else if (chunk && chunk.startsWith("Error:")) {
+            console.error("[OpenAIClient] Error from generator:", chunk)
+            throw new Error(chunk)
+          }
+        }
+      } catch (error) {
+        console.error("[OpenAIClient] Error processing generator:", error)
+        throw error
       }
 
       return fullResponse
@@ -86,5 +98,4 @@ Tailor your advice to their background, but don't explicitly mention that you're
   }
 }
 
-// Import the askGPT function
-import { askGPT } from "./chat-client"
+export { OpenAIClient }

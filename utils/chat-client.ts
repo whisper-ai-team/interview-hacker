@@ -1,29 +1,21 @@
-// This file handles client-side chat interactions but delegates actual API calls to a server endpoint
+// This file handles the actual API communication
+import { v4 as uuidv4 } from "uuid"
 
-export async function* askGPT(
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
-  model: "gpt4o" | "gemini" = "gpt4o",
-) {
+type Message = {
+  role: "system" | "user" | "assistant"
+  content: string
+}
+
+/**
+ * Creates an async generator that streams responses from the GPT model
+ * @param messages The conversation history
+ * @param model The model to use (e.g., "gpt-4o")
+ */
+export async function* askGPT(messages: Message[], model = "gpt-4o") {
   try {
-    console.log(`[OpenAI] Sending request to ${model}`)
-    console.log(`[OpenAI] Messages:`, JSON.stringify(messages, null, 2))
+    const requestId = uuidv4()
+    console.log(`[askGPT] Starting request ${requestId} with ${messages.length} messages`)
 
-    // Get resume context if available
-    let resumeContent = null
-    try {
-      if (typeof window !== "undefined") {
-        const storedResume = sessionStorage.getItem("userResume")
-        if (storedResume) {
-          const resumeData = JSON.parse(storedResume)
-          resumeContent = resumeData.content
-          console.log("[OpenAI] Resume content loaded from session storage")
-        }
-      }
-    } catch (error) {
-      console.error("[OpenAI] Error accessing session storage:", error)
-    }
-
-    // Create the request to our secure API endpoint
     const response = await fetch("/api/chat", {
       method: "POST",
       headers: {
@@ -32,112 +24,74 @@ export async function* askGPT(
       body: JSON.stringify({
         messages,
         model,
-        resumeContent,
+        stream: true,
       }),
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      console.error("[OpenAI] API request failed:", error)
-      yield `Error: API request failed with status ${response.status}`
-      return
+      const errorData = await response.json().catch(() => ({}))
+      const errorMessage = errorData.error || `API error: ${response.status} ${response.statusText}`
+      console.error(`[askGPT] Request ${requestId} failed:`, errorMessage)
+      throw new Error(errorMessage)
     }
 
-    // Handle streaming response
-    const reader = response.body?.getReader()
-    if (!reader) {
-      console.error("[OpenAI] Failed to get response reader")
-      yield "Error: Failed to read response stream"
-      return
+    if (!response.body) {
+      console.error(`[askGPT] Request ${requestId}: No response body`)
+      throw new Error("Response body is null")
     }
 
+    // Create a reader to read the stream
+    const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    let chunkCount = 0
-    let totalContent = ""
 
-    while (true) {
-      const { done, value } = await reader.read()
+    console.log(`[askGPT] Request ${requestId}: Starting to read stream`)
 
-      if (done) {
-        break
-      }
-
-      const chunk = decoder.decode(value, { stream: true })
-      chunkCount++
-
-      // Process each line (in case multiple chunks arrive together)
-      const lines = chunk.split("\n").filter((line) => line.trim() !== "")
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const content = line.substring(6)
-
-          if (content === "[DONE]") {
-            continue
-          }
-
-          try {
-            // Parse the JSON content
-            const parsed = JSON.parse(content)
-            const textContent = parsed.choices[0]?.delta?.content || ""
-
-            if (textContent) {
-              totalContent += textContent
-              console.log(`[OpenAI] Chunk #${chunkCount}: "${textContent}"`)
-              yield textContent
-            }
-          } catch (e) {
-            console.error("[OpenAI] Error parsing chunk:", e)
-          }
-        }
-      }
-    }
-
-    // Log completion
-    console.log(`[OpenAI] Request completed with ${chunkCount} chunks`)
-    console.log(`[OpenAI] Final response: "${totalContent.substring(0, 100)}${totalContent.length > 100 ? "..." : ""}"`)
-  } catch (error) {
-    console.error("[OpenAI] Error calling API:", error)
-    console.error("[OpenAI] Error details:", error instanceof Error ? error.stack : String(error))
-    yield "Sorry, I encountered an error while generating a response. Please check your network connection."
-  }
-}
-
-export async function sendMessage(message: string, context = "") {
-  try {
-    // Get resume context if available
-    let resumeContent = null
     try {
-      if (typeof window !== "undefined") {
-        const storedResume = sessionStorage.getItem("userResume")
-        if (storedResume) {
-          const resumeData = JSON.parse(storedResume)
-          resumeContent = resumeData.content
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) {
+          console.log(`[askGPT] Request ${requestId}: Stream complete`)
+          break
+        }
+
+        // Decode the chunk and yield it
+        const chunk = decoder.decode(value, { stream: true })
+
+        // Process the chunk - it might contain multiple SSE events
+        const lines = chunk.split("\n").filter((line) => line.trim() !== "")
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6)
+
+            // Check if it's the [DONE] marker
+            if (data === "[DONE]") {
+              console.log(`[askGPT] Request ${requestId}: Received [DONE] marker`)
+              continue
+            }
+
+            try {
+              const parsed = JSON.parse(data)
+              if (parsed.choices && parsed.choices[0]?.delta?.content) {
+                yield parsed.choices[0].delta.content
+              }
+            } catch (e) {
+              console.warn(`[askGPT] Request ${requestId}: Error parsing JSON:`, e)
+              // If we can't parse as JSON, just yield the raw data
+              yield data
+            }
+          }
         }
       }
     } catch (error) {
-      console.error("Error accessing session storage:", error)
+      console.error(`[askGPT] Request ${requestId}: Error reading stream:`, error)
+      throw error
+    } finally {
+      reader.releaseLock()
     }
-
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        context,
-        resumeContent,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error("Failed to send message")
-    }
-
-    return await response.json()
   } catch (error) {
-    console.error("Error sending message:", error)
+    console.error("[askGPT] Error:", error)
     throw error
   }
 }
