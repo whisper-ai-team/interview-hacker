@@ -83,7 +83,7 @@ export default function PrivacyPage() {
 
           <h2>8. Contact Us</h2>
           <p>If you have any questions about this privacy policy or our privacy practices, please contact us at:</p>
-          <p>Email: privacy@interviewcopilot.com</p>
+          <p>Email: privacy@InterviewHackr.com</p>
         </div>
       </div>
     </div>

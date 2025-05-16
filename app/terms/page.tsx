@@ -90,7 +90,7 @@ export default function TermsPage() {
 
           <h2>10. Contact Us</h2>
           <p>If you have any questions about these Terms, please contact us at:</p>
-          <p>Email: terms@interviewcopilot.com</p>
+          <p>Email: terms@InterviewHackr.com</p>
         </div>
       </div>
     </div>
