@@ -26,7 +26,7 @@ export class DeepgramTranscriber {
   private processingTimer: NodeJS.Timeout | null = null
 
   constructor(apiKey: string) {
-    this.apiKey = apiKey
+    this.apiKey = 'd37999dce238f3eccce433130eca53124de90926'
     console.log("[Deepgram] Initialized with API key:", apiKey ? "API key provided" : "No API key")
   }
 

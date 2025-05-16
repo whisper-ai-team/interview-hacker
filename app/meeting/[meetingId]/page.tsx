@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
+import { useSession } from "next-auth/react"
 import { DeepgramTranscriber } from "@/utils/deepgram-transcriber"
 import { OpenAIClient } from "@/utils/openai-client"
+import { generateUUID } from "@/utils/uuid"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -26,19 +29,30 @@ import {
   ChevronDown,
   Cpu,
   ArrowUp,
-  Download,
   Users,
   Clock,
+  Sparkles,
+  FileText,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { generateUUID } from "@/utils/uuid"
+import { Progress } from "@/components/ui/progress"
 import LoadingSpinner from "@/components/ui/loader-spinner"
-
-// Add import for the CSS at the top
-import "@/app/conversation.css"
-import { useSession } from "next-auth/react"
 import ConversationDisplay from "@/components/meeting/conversation-display"
-import MeetingCompleted from "@/components/meeting/meeting-completed"
+import { MeetingCompleted } from "@/components/meeting/meeting-completed"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+
+import "@/app/conversation.css"
+
+// Animation variants
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+}
+
+const statusCardVariants = {
+  idle: { scale: 1 },
+  active: { scale: 1.02, transition: { yoyo: Number.POSITIVE_INFINITY, duration: 2 } },
+}
 
 export default function MeetingPage({ params }: { params: { meetingId: string } }) {
   const { data: session, status } = useSession()
@@ -657,21 +671,21 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
     switch (connectionStatus) {
       case "connected":
         return (
-          <Badge className="bg-emerald-500 hover:bg-emerald-600">
+          <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white">
             <CheckCircle2 className="h-3 w-3 mr-1" />
             Connected
           </Badge>
         )
       case "connecting":
         return (
-          <Badge className="bg-amber-500 hover:bg-amber-600">
+          <Badge className="bg-amber-500 hover:bg-amber-600 text-white">
             <Loader2 className="h-3 w-3 mr-1 animate-spin" />
             {isReconnecting ? "Reconnecting..." : "Connecting..."}
           </Badge>
         )
       case "error":
         return (
-          <Badge className="bg-rose-500 hover:bg-rose-600">
+          <Badge className="bg-rose-500 hover:bg-rose-600 text-white">
             <XCircle className="h-3 w-3 mr-1" />
             Connection Failed
           </Badge>
@@ -747,31 +761,40 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" text="Loading interview session..." />
+      <div className="flex items-center justify-center min-h-screen  to-indigo-50/50">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <LoadingSpinner size="lg" text="Loading interview session..." />
+          <p className="mt-4 text-muted-foreground animate-pulse">Preparing your interview environment...</p>
+        </motion.div>
       </div>
     )
   }
 
   if (loadingError) {
     return (
-      <div className="flex items-center justify-center min-h-screen p-4">
-        <Alert variant="destructive" className="max-w-md">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{loadingError}</AlertDescription>
-          <div className="mt-4">
-            <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
-          </div>
-        </Alert>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-50/50 to-indigo-50/50 p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Alert variant="destructive" className="max-w-md shadow-lg">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Error Loading Meeting</AlertTitle>
+            <AlertDescription>{loadingError}</AlertDescription>
+            <div className="mt-4">
+              <Button onClick={() => router.push("/dashboard")}>Return to Dashboard</Button>
+            </div>
+          </Alert>
+        </motion.div>
       </div>
     )
   }
-
-  // Remove credit check since we're not using credits anymore
-  // if (!hasEnoughCredits) {
-  //   return <InsufficientCredits />
-  // }
 
   if (isMeetingCompleted()) {
     return <MeetingCompleted meetingId={params.meetingId} />
@@ -780,330 +803,495 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
   return (
     <div
       ref={mainContainerRef}
-      className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-4 md:p-8"
+      className="min-h-screen via-white to-indigo-50/40 p-4 md:p-8"
     >
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
-          <div>
-            <div className="flex items-center">
-              <Rocket className="h-8 w-8 text-indigo-600 mr-2" />
-              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
-                {meeting?.title || "Interview Session"}
-              </h1>
+      <motion.div className="max-w-6xl mx-auto" initial="hidden" animate="visible" variants={fadeIn}>
+        <header className="mb-8">
+          <motion.div
+            className="flex flex-col md:flex-row md:justify-between md:items-center gap-4"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <div>
+              <div className="flex items-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 rounded-full blur-md"></div>
+                  <div className="relative bg-gradient-to-br from-primary to-purple-600 rounded-full p-2">
+                    <Rocket className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+                <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-br from-primary to-purple-600 bg-clip-text text-transparent ml-3">
+                  {meeting?.title || "Interview Session"}
+                </h1>
+              </div>
+              <p className="text-gray-600 ml-1 mt-1.5">
+                {meeting?.description || "Transcribe your interview and get AI-powered responses"}
+              </p>
             </div>
-            <p className="text-gray-600">
-              {meeting?.description || "Transcribe your interview and get AI-powered responses"}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant={useFallbackMode ? "default" : "outline"}
-              size="sm"
-              onClick={toggleFallbackMode}
-              className={useFallbackMode ? "bg-amber-500 hover:bg-amber-600" : ""}
+
+            <motion.div
+              className="flex flex-wrap items-center gap-3"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
             >
-              {useFallbackMode ? "Fallback Mode: ON" : "Fallback Mode: OFF"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-              className="flex items-center"
-            >
-              <Settings className="h-4 w-4 mr-1" />
-              Settings
-              {showAdvancedSettings ? (
-                <ChevronDown className="h-3 w-3 ml-1" />
-              ) : (
-                <ChevronRight className="h-3 w-3 ml-1" />
-              )}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowDebugInfo(!showDebugInfo)}>
-              <Info className="h-4 w-4 mr-1" />
-              {showDebugInfo ? "Hide Debug" : "Show Debug"}
-            </Button>
-            {conversationMessages.length > 0 && (
-              <Button variant="outline" size="sm" onClick={exportConversation}>
-                <Download className="h-4 w-4 mr-1" />
-                Export Transcript
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={useFallbackMode ? "default" : "outline"}
+                      size="sm"
+                      onClick={toggleFallbackMode}
+                      className={useFallbackMode ? "bg-amber-500 hover:bg-amber-600 text-white" : ""}
+                    >
+                      {useFallbackMode ? (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-1.5" />
+                          Simulation Mode
+                        </>
+                      ) : (
+                        "Enable Simulation"
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    {useFallbackMode
+                      ? "Currently running in simulation mode with auto-generated questions"
+                      : "Use simulation mode when screen sharing is not available"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+                className="flex items-center"
+              >
+                <Settings className="h-4 w-4 mr-1.5" />
+                Settings
+                {showAdvancedSettings ? (
+                  <ChevronDown className="h-3 w-3 ml-1.5" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 ml-1.5" />
+                )}
               </Button>
-            )}
-          </div>
+
+              <Button variant="outline" size="sm" onClick={() => setShowDebugInfo(!showDebugInfo)}>
+                <Info className="h-4 w-4 mr-1.5" />
+                {showDebugInfo ? "Hide Debug" : "Show Debug"}
+              </Button>
+
+              {conversationMessages.length > 0 && (
+                <Button variant="outline" size="sm" onClick={exportConversation} className="text-primary">
+                  <FileText className="h-4 w-4 mr-1.5" />
+                  Export Transcript
+                </Button>
+              )}
+            </motion.div>
+          </motion.div>
         </header>
 
-        {/* Advanced Settings Panel */}
-        {showAdvancedSettings && (
-          <div className="mb-6 bg-white rounded-xl p-4 shadow-md border border-gray-100">
-            <h3 className="font-medium text-gray-800 mb-3 flex items-center">
-              <Cpu className="h-4 w-4 mr-2 text-indigo-500" />
-              Advanced Settings
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="showProgress"
-                  checked={showTranscriptProgress}
-                  onCheckedChange={(checked) => setShowTranscriptProgress(checked as boolean)}
-                />
-                <label
-                  htmlFor="showProgress"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Show transcript progress
-                </label>
+        <AnimatePresence>
+          {/* Advanced Settings Panel */}
+          {showAdvancedSettings && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className="mb-6 bg-white rounded-xl p-4 shadow-md border border-gray-100">
+                <h3 className="font-medium text-gray-800 mb-3 flex items-center">
+                  <Cpu className="h-4 w-4 mr-2 text-primary" />
+                  Advanced Settings
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="showProgress"
+                      checked={showTranscriptProgress}
+                      onCheckedChange={(checked) => setShowTranscriptProgress(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="showProgress"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Show transcript progress
+                    </label>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* API Key Warnings */}
-        {!hasOpenAIKey && (
-          <div className="mb-6 space-y-2">
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start">
-              <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 mr-2 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-amber-800">Missing OpenAI API Key</p>
-                <p className="text-sm text-amber-700">Add OPENAI_API_KEY to your environment variables.</p>
+        <AnimatePresence>
+          {!hasOpenAIKey && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mb-6 space-y-2"
+            >
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start shadow-md">
+                <div className="bg-amber-200/50 rounded-full p-1.5 mt-0.5 mr-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="font-medium text-amber-800">Missing OpenAI API Key</p>
+                  <p className="text-amber-700 text-sm mt-1">
+                    Add OPENAI_API_KEY to your environment variables to enable AI-powered responses.
+                  </p>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Error Display */}
-        {error && (
-          <Alert variant="destructive" className="mb-6 border-rose-200 bg-rose-50">
-            <AlertTriangle className="h-4 w-4 text-rose-500" />
-            <AlertTitle className="text-rose-800">Error</AlertTitle>
-            <AlertDescription className="text-rose-700">
-              {error}
-              {error.includes("Deepgram connection closed") && (
-                <div className="mt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleManualReconnect}
-                    className="bg-white hover:bg-gray-50"
-                    disabled={!isScreenSharing || connectionStatus === "connecting"}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reconnect
-                  </Button>
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="mb-6"
+            >
+              <Alert variant="destructive" className="border-rose-200 bg-rose-50 shadow-md rounded-xl">
+                <div className="flex">
+                  <div className="bg-rose-100 rounded-full p-1 mt-0.5 mr-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-500" />
+                  </div>
+                  <div>
+                    <AlertTitle className="text-rose-800 font-semibold">Error</AlertTitle>
+                    <AlertDescription className="text-rose-700">
+                      {error}
+                      {error.includes("Deepgram connection closed") && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleManualReconnect}
+                            className="bg-white hover:bg-gray-50"
+                            disabled={!isScreenSharing || connectionStatus === "connecting"}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Reconnect
+                          </Button>
+                        </div>
+                      )}
+                      {error.includes("OpenAI API error") && !useFallbackMode && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={toggleFallbackMode}
+                            className="bg-white hover:bg-gray-50"
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Enable Simulation Mode
+                          </Button>
+                        </div>
+                      )}
+                    </AlertDescription>
+                  </div>
                 </div>
-              )}
-              {error.includes("OpenAI API error") && !useFallbackMode && (
-                <div className="mt-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleFallbackMode}
-                    className="bg-white hover:bg-gray-50"
-                  >
-                    Enable Fallback Mode
-                  </Button>
-                </div>
-              )}
-            </AlertDescription>
-          </Alert>
-        )}
+              </Alert>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Debug Info */}
-        {showDebugInfo && (
-          <div className="mb-6 bg-gray-900 text-gray-200 rounded-xl p-4 text-xs font-mono shadow-lg">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold">Debug Information</h3>
-              <Button variant="ghost" size="sm" onClick={() => setDebugLogs([])} className="h-6 text-xs text-gray-400">
-                Clear
-              </Button>
-            </div>
-            <div className="max-h-40 overflow-y-auto">
-              {debugLogs.map((log, i) => (
-                <div key={i} className="py-1 border-b border-gray-700">
-                  {log}
+        <AnimatePresence>
+          {showDebugInfo && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden mb-6"
+            >
+              <div className="bg-gray-900 text-gray-200 rounded-xl p-4 text-xs font-mono shadow-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-bold">Debug Information</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setDebugLogs([])}
+                    className="h-6 text-xs text-gray-400"
+                  >
+                    Clear
+                  </Button>
                 </div>
-              ))}
-              {debugLogs.length === 0 && <div className="text-gray-500">No logs yet</div>}
-            </div>
-          </div>
-        )}
+                <div className="max-h-40 overflow-y-auto">
+                  {debugLogs.map((log, i) => (
+                    <div key={i} className="py-1 border-b border-gray-700 last:border-b-0">
+                      {log}
+                    </div>
+                  ))}
+                  {debugLogs.length === 0 && <div className="text-gray-500">No logs yet</div>}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column - Screen Sharing */}
           <div className="lg:col-span-4">
             {/* Meeting Status Card */}
-            <Card className="overflow-hidden border-0 shadow-lg bg-white rounded-xl">
-              <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
-                <CardTitle className="flex items-center justify-between">
-                  <span>{isSimulationMode ? "Simulation Mode" : "Interview Status"}</span>
-                  {isTranscribing && getConnectionStatusBadge()}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-5">
-                {!isScreenSharing ? (
-                  <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center justify-center text-center">
-                    <Share2 className="h-12 w-12 text-indigo-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">Start Your Interview</h3>
-                    <p className="text-gray-500 text-sm mb-5">
-                      Share a screen with audio to start transcribing your interview.
-                    </p>
-                    <Button
-                      onClick={startScreenShare}
-                      className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md transition-all"
-                      disabled={isStartingScreenShare}
-                    >
-                      {isStartingScreenShare ? (
+            <motion.div variants={statusCardVariants} animate={isScreenSharing ? "active" : "idle"}>
+              <Card className="overflow-hidden border border-purple-100/50 shadow-lg bg-white rounded-xl">
+                <CardHeader className="bg-gradient-to-br from-primary to-purple-600 text-white pb-4">
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center">
+                      {isSimulationMode ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Starting...
+                          <Sparkles className="h-5 w-5 mr-2 animate-pulse" />
+                          Simulation Mode
                         </>
                       ) : (
                         <>
-                          <Share2 className="mr-2 h-4 w-4" /> Start Interview
+                          <Rocket className="h-5 w-5 mr-2" />
+                          Interview Status
                         </>
                       )}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {isSimulationMode ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-center text-amber-800 mb-2">
-                          <AlertTriangle className="h-5 w-5 mr-2 text-amber-500" />
-                          <h3 className="font-medium">Simulation Mode Active</h3>
-                        </div>
-                        <p className="text-sm text-amber-700">
-                          Screen sharing is not available in this environment. Running in simulation mode with
-                          auto-generated interview questions.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md">
-                        <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
-                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
-                          Preview
+                    </span>
+                    {isTranscribing && getConnectionStatusBadge()}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  {!isScreenSharing ? (
+                    <motion.div
+                      className="bg-gradient-to-br from-gray-50 to-white rounded-xl p-6 flex flex-col items-center justify-center text-center border border-gray-100 shadow-sm"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <div className="relative mb-4">
+                        <div className="absolute -inset-1 rounded-full bg-primary/10 blur-md animate-pulse"></div>
+                        <div className="relative bg-gradient-to-br from-primary/90 to-purple-600/90 rounded-full p-3">
+                          <Share2 className="h-8 w-8 text-white" />
                         </div>
                       </div>
-                    )}
-
-                    {/* Meeting Info */}
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Users className="h-4 w-4 text-indigo-500 mr-2" />
-                          <span className="font-medium text-sm">Participants</span>
-                        </div>
-                        <Badge variant="outline">{participantCount}</Badge>
-                      </div>
-
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center">
-                          <Clock className="h-4 w-4 text-indigo-500 mr-2" />
-                          <span className="font-medium text-sm">Duration</span>
-                        </div>
-                        <span className="text-xs text-gray-500">
-                          {lastProcessedTime ? `Started at ${lastProcessedTime.toLocaleTimeString()}` : "Just started"}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center">
-                          <Mic className="h-4 w-4 text-indigo-500 mr-2" />
-                          <span className="font-medium text-sm">Audio</span>
-                        </div>
-                        <div className="text-sm text-gray-500 flex items-center">{getAudioLevelIndicator()}</div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
+                      <h3 className="text-lg font-medium text-gray-800 mb-2">Start Your Interview</h3>
+                      <p className="text-gray-500 text-sm mb-5">
+                        Share a screen with audio to start transcribing your interview.
+                      </p>
                       <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={stopScreenShare}
-                        className="bg-rose-500 hover:bg-rose-600"
+                        onClick={startScreenShare}
+                        className="bg-gradient-to-br from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 text-white shadow-md transition-all hover:shadow-xl"
+                        disabled={isStartingScreenShare}
                       >
-                        <StopCircle className="mr-2 h-4 w-4" /> {isSimulationMode ? "End Simulation" : "End Interview"}
+                        {isStartingScreenShare ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="mr-2 h-4 w-4" /> Start Interview
+                          </>
+                        )}
                       </Button>
+                    </motion.div>
+                  ) : (
+                    <div className="space-y-4">
+                      {isSimulationMode ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.5 }}
+                          className="bg-amber-50 border border-amber-200 rounded-lg p-4"
+                        >
+                          <div className="flex items-center text-amber-800 mb-2">
+                            <div className="bg-amber-100 rounded-full p-1 mr-2">
+                              <Sparkles className="h-4 w-4 text-amber-600" />
+                            </div>
+                            <h3 className="font-medium">Simulation Mode Active</h3>
+                          </div>
+                          <p className="text-sm text-amber-700">
+                            Screen sharing is not available in this environment. Running in simulation mode with
+                            auto-generated interview questions.
+                          </p>
+                        </motion.div>
+                      ) : (
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.5 }}
+                          className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md"
+                        >
+                          <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
+                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
+                            Preview
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {/* Meeting Info */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.2 }}
+                        className="bg-gradient-to-br from-gray-50 to-white rounded-lg p-3 border border-gray-100 shadow-sm"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <div className="bg-primary/10 rounded-full p-1 mr-2">
+                              <Users className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="font-medium text-sm">Participants</span>
+                          </div>
+                          <Badge variant="outline" className="bg-primary/5 text-primary">
+                            {participantCount}
+                          </Badge>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <div className="bg-primary/10 rounded-full p-1 mr-2">
+                              <Clock className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="font-medium text-sm">Duration</span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {lastProcessedTime
+                              ? `Started at ${lastProcessedTime.toLocaleTimeString()}`
+                              : "Just started"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center">
+                            <div className="bg-primary/10 rounded-full p-1 mr-2">
+                              <Mic className="h-4 w-4 text-primary" />
+                            </div>
+                            <span className="font-medium text-sm">Audio</span>
+                          </div>
+                          <div className="text-sm text-gray-500 flex items-center">{getAudioLevelIndicator()}</div>
+                        </div>
+                      </motion.div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          variant="destructive"
+                          onClick={stopScreenShare}
+                          className="bg-gradient-to-br from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 shadow-md"
+                        >
+                          <StopCircle className="mr-2 h-4 w-4" />{" "}
+                          {isSimulationMode ? "End Simulation" : "End Interview"}
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* Live Transcript Card */}
-            <Card className="mt-6 overflow-hidden border-0 shadow-lg bg-white rounded-xl">
-              <CardHeader className="bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Mic className="mr-2 h-5 w-5" />
-                    Live Transcript
-                  </div>
-                  {connectionStatus === "connected" && isTranscribing && (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-0">
-                      <span className="mr-1 h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-                      Live
-                    </Badge>
-                  )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-5">
-                <div className="bg-white border border-gray-100 rounded-xl p-4 min-h-[150px] max-h-[300px] overflow-y-auto shadow-inner">
-                  {transcript ? (
-                    <div>
-                      <p className="text-gray-800">{transcript}</p>
-                      {showTranscriptProgress && (
-                        <div className="mt-3 text-xs text-gray-500">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="flex items-center">
-                              <Clock className="h-3 w-3 mr-1" />
-                              Next update in {Math.floor(timeUntilNextProcess / 1000)}s
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
-                            <div
-                              className="bg-emerald-500 h-1.5 rounded-full transition-all duration-300 ease-in-out"
-                              style={{
-                                width: `${Math.min(100, 100 - (timeUntilNextProcess / 30000) * 100)}%`,
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                      )}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mt-6"
+            >
+              <Card className="overflow-hidden border border-emerald-100/50 shadow-lg bg-white rounded-xl">
+                <CardHeader className="bg-gradient-to-br from-emerald-500 to-teal-500 text-white pb-4">
+                  <CardTitle className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <Mic className="mr-2 h-5 w-5" />
+                      Live Transcript
                     </div>
-                  ) : isTranscribing ? (
-                    connectionStatus === "connecting" ? (
-                      <div className="flex items-center justify-center h-full">
-                        <Loader2 className="h-5 w-5 text-indigo-500 animate-spin mr-2" />
-                        <p className="text-gray-500">Connecting to Deepgram...</p>
+                    {connectionStatus === "connected" && isTranscribing && (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-0">
+                        <span className="mr-1 h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
+                        Live
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 min-h-[150px] max-h-[300px] overflow-y-auto shadow-inner">
+                    {transcript ? (
+                      <div>
+                        <p className="text-gray-800">{transcript}</p>
+                        {showTranscriptProgress && (
+                          <div className="mt-3 text-xs text-gray-500">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="flex items-center">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Next update in {Math.floor(timeUntilNextProcess / 1000)}s
+                              </span>
+                            </div>
+                            <Progress
+                              value={Math.min(100, 100 - (timeUntilNextProcess / 30000) * 100)}
+                              className="h-1.5 bg-emerald-100"
+                            />
+                          </div>
+                        )}
                       </div>
+                    ) : isTranscribing ? (
+                      connectionStatus === "connecting" ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="bg-primary/10 p-2 rounded-full mr-2">
+                            <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                          </div>
+                          <p className="text-gray-500">Connecting to Deepgram...</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center h-full">
+                          <div className="relative mb-3">
+                            <div className="absolute -inset-1 bg-emerald-500/20 rounded-full blur-md animate-pulse"></div>
+                            <div className="relative bg-gradient-to-br from-emerald-500/80 to-teal-500/80 rounded-full p-2">
+                              <Mic className="h-6 w-6 text-white" />
+                            </div>
+                          </div>
+                          <p className="text-gray-400 italic">Listening for speech...</p>
+                        </div>
+                      )
                     ) : (
-                      <p className="text-gray-400 italic">Listening for speech...</p>
-                    )
-                  ) : (
-                    <p className="text-gray-400 italic">Start an interview to see transcription</p>
+                      <div className="flex flex-col items-center justify-center h-full">
+                        <div className="bg-gray-100 rounded-full p-3 mb-3">
+                          <Mic className="h-6 w-6 text-gray-400" />
+                        </div>
+                        <p className="text-gray-400 italic">Start an interview to see transcription</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between border-t pt-4 px-5">
+                  <div className="text-xs text-gray-500 flex items-center">
+                    <Settings className="h-3 w-3 mr-1" />
+                    Powered by Deepgram
+                  </div>
+                  {connectionStatus === "disconnected" && isScreenSharing && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleManualReconnect}
+                      className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" /> Reconnect
+                    </Button>
                   )}
-                </div>
-              </CardContent>
-              <CardFooter className="flex justify-between border-t pt-4 px-5">
-                <div className="text-xs text-gray-500 flex items-center">
-                  <Settings className="h-3 w-3 mr-1" />
-                  Powered by Deepgram
-                </div>
-                {connectionStatus === "disconnected" && isScreenSharing && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleManualReconnect}
-                    className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" /> Reconnect
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
+                </CardFooter>
+              </Card>
+            </motion.div>
           </div>
 
           {/* Right Column - Conversation Display */}
-          <div className="lg:col-span-8">
+          <motion.div
+            className="lg:col-span-8"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+          >
             <div className="h-full">
               <ConversationDisplay
                 meetingId={params.meetingId}
@@ -1115,20 +1303,29 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                 isSimulationMode={isSimulationMode}
               />
             </div>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Scroll to top button */}
-      {showScrollToTop && (
-        <Button
-          className="fixed bottom-6 right-6 rounded-full w-12 h-12 shadow-lg bg-indigo-600 hover:bg-indigo-700 transition-all"
-          onClick={scrollToTop}
-          aria-label="Scroll to top"
-        >
-          <ArrowUp className="h-5 w-5" />
-        </Button>
-      )}
+      <AnimatePresence>
+        {showScrollToTop && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed bottom-6 right-6 z-50"
+          >
+            <Button
+              className="rounded-full w-12 h-12 shadow-lg bg-gradient-to-br from-primary to-purple-600 hover:from-primary/90 hover:to-purple-700 transition-all"
+              onClick={scrollToTop}
+              aria-label="Scroll to top"
+            >
+              <ArrowUp className="h-5 w-5" />
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
