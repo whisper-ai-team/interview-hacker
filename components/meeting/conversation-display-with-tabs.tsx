@@ -65,7 +65,7 @@ export default function ConversationDisplay({
       </CardHeader>
       <CardContent className="p-0 h-[calc(100%-60px)] overflow-hidden">
         <TabsContent value="conversation" className="m-0 h-full">
-          <div className="h-full overflow-y-auto p-4">
+          <div className="h-full overflow-y-auto p-4 scroll-smooth">
             {messages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 p-6">
                 <Bot className="h-16 w-16 text-indigo-200 mb-4" />

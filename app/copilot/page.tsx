@@ -632,8 +632,8 @@ export default function CopilotPage() {
       ref={mainContainerRef}
       className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-4 md:p-8"
     >
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+      <div className="max-w-screen-xl mx-auto">
+        <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 sticky top-0 bg-white/70 backdrop-blur z-10 p-4 rounded-b-lg shadow">
           <div>
             <div className="flex items-center">
               <Rocket className="h-8 w-8 text-indigo-600 mr-2" />
@@ -775,9 +775,9 @@ export default function CopilotPage() {
         )}
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
           {/* Left Column - Screen Sharing */}
-          <div className="lg:col-span-4">
+          <div className="xl:col-span-3">
             {/* Meeting Status Card */}
             <Card className="overflow-hidden border-0 shadow-lg bg-white rounded-xl">
               <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
@@ -938,7 +938,7 @@ export default function CopilotPage() {
           </div>
 
           {/* Right Column - Conversation Display */}
-          <div className="lg:col-span-8">
+          <div className="xl:col-span-9">
             <div className="h-full">
               <ConversationDisplay
                 meetingId="standalone"

@@ -42,7 +42,10 @@ export function ConversationDisplay({
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]")
       if (scrollElement) {
-        scrollElement.scrollTop = scrollElement.scrollHeight
+        scrollElement.scrollTo({
+          top: scrollElement.scrollHeight,
+          behavior: "smooth",
+        })
       }
     }
   }, [messages, currentTranscript])
