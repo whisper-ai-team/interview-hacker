@@ -248,7 +248,7 @@ export default function Home() {
                         <div className="size-3 rounded-full bg-yellow-500"></div>
                         <div className="size-3 rounded-full bg-green-500"></div>
                       </div>
-                      <h3 className="font-medium ml-4">Interview Simulation</h3>
+                      <h3 className="font-medium ml-4">Interview Preview</h3>
                     </div>
                   </div>
 

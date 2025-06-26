@@ -34,12 +34,16 @@ export default function ConversationDisplay({
   const [activeTab, setActiveTab] = useState("conversation")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Scroll to bottom when new messages are added
+  // Scroll to bottom while a response is generating or transcribing
   useEffect(() => {
-    if (messagesEndRef.current) {
+    const last = messages[messages.length - 1]
+    if (
+      messagesEndRef.current &&
+      (last?.isProcessing || (isTranscribing && currentTranscript))
+    ) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
-  }, [messages])
+  }, [messages, isTranscribing, currentTranscript])
 
   // Format timestamp
   const formatTime = (date: Date) => {

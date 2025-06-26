@@ -40,15 +40,20 @@ export function ConversationDisplay({
 
   useEffect(() => {
     if (scrollAreaRef.current) {
-      const scrollElement = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]")
+      const scrollElement = scrollAreaRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]",
+      ) as HTMLElement | null
       if (scrollElement) {
-        scrollElement.scrollTo({
-          top: scrollElement.scrollHeight,
-          behavior: "smooth",
-        })
+        const last = messages[messages.length - 1]
+        if (last?.isProcessing || (isTranscribing && currentTranscript)) {
+          scrollElement.scrollTo({
+            top: scrollElement.scrollHeight - scrollElement.clientHeight,
+            behavior: "smooth",
+          })
+        }
       }
     }
-  }, [messages, currentTranscript])
+  }, [messages, currentTranscript, isTranscribing])
 
   return (
     <div className="h-full flex flex-col">

@@ -934,7 +934,7 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                             className="bg-white hover:bg-gray-50"
                           >
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Enable Simulation Mode
+                            Enable Fallback Mode
                           </Button>
                         </div>
                       )}
