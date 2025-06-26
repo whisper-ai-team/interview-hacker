@@ -93,8 +93,6 @@ export default function CopilotPage() {
   const [timeUntilNextProcess, setTimeUntilNextProcess] = useState(30000)
   const processingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Add a new state variable for simulation mode
-  const [isSimulationMode, setIsSimulationMode] = useState(false)
 
   // Add a state for participant count (simulated)
   const [participantCount, setParticipantCount] = useState(1)
@@ -280,7 +278,6 @@ export default function CopilotPage() {
 
         setSelectedScreen(stream)
         setIsScreenSharing(true)
-        setIsSimulationMode(false)
 
         // Listen for the end of screen sharing
         stream.getVideoTracks()[0].addEventListener("ended", () => {
@@ -312,13 +309,12 @@ export default function CopilotPage() {
         // Check if this is a permission policy error
         const errorMessage = error instanceof Error ? error.message : String(error)
         if (errorMessage.includes("permissions policy") || errorMessage.includes("Permission denied")) {
-          addDebugLog("Screen sharing permission denied. Using simulation mode.")
+          addDebugLog("Screen sharing permission denied.")
 
-          // Enable fallback/simulation mode
+          // Enable fallback mode
           setUseFallbackMode(true)
 
-          // Create a simulated screen sharing session
-          startSimulatedSession()
+          setError("Screen sharing is not permitted in this environment.")
         } else {
           // For other errors, show the error message
           setError(`Could not start screen sharing: ${errorMessage}`)
@@ -334,60 +330,6 @@ export default function CopilotPage() {
   }
 
   // Add a new function to simulate a screen sharing session
-  const startSimulatedSession = () => {
-    addDebugLog("Starting simulated interview session")
-
-    // Set UI state as if we're screen sharing
-    setIsScreenSharing(true)
-    setConnectionStatus("connected")
-    setIsSimulationMode(true)
-    setIsStartingScreenShare(false)
-
-    // Simulate 2-4 participants
-    const randomParticipants = Math.floor(Math.random() * 3) + 2
-    setParticipantCount(randomParticipants)
-
-    // Create a simulated transcript after a short delay
-    setTimeout(() => {
-      const simulatedTranscript = "Tell me about a time when you had to deal with a difficult team member or colleague."
-      handleTranscript(simulatedTranscript)
-
-      // Process the simulated transcript
-      handleRollingTranscript(simulatedTranscript)
-
-      addDebugLog("Simulated transcript generated")
-    }, 2000)
-
-    // Set up an interval to simulate more transcript segments
-    const interviewInterval = setInterval(() => {
-      // Only add a new transcript if we're still in simulation mode
-      if (isScreenSharing && isSimulationMode) {
-        const simulatedTranscripts = [
-          "How do you prioritize your work when you have multiple deadlines?",
-          "Can you describe a situation where you had to learn a new technology quickly?",
-          "What's your approach to solving complex problems?",
-          "Tell me about a project where you had to work with limited resources.",
-          "How do you handle feedback, especially when it's critical?",
-          "What strategies do you use to maintain work-life balance?",
-          "Describe a situation where you had to make a difficult decision with incomplete information.",
-        ]
-
-        const randomTranscript = simulatedTranscripts[Math.floor(Math.random() * simulatedTranscripts.length)]
-        handleTranscript(randomTranscript)
-
-        // Process the simulated transcript
-        handleRollingTranscript(randomTranscript)
-
-        addDebugLog("New simulated transcript generated")
-      } else {
-        // Clear the interval if we're no longer in simulation mode
-        clearInterval(interviewInterval)
-      }
-    }, 30000) // New transcript every 30 seconds
-
-    // Store the interval ID so we can clear it when stopping
-    processingTimerRef.current = interviewInterval
-  }
 
   // Stop screen sharing
   const stopScreenShare = () => {
@@ -397,11 +339,10 @@ export default function CopilotPage() {
     }
 
     setIsScreenSharing(false)
-    setIsSimulationMode(false)
     setParticipantCount(1)
     stopTranscription()
 
-    // Clear any simulation timers
+    // Clear any timers
     if (processingTimerRef.current) {
       clearInterval(processingTimerRef.current)
       processingTimerRef.current = null
@@ -691,8 +632,8 @@ export default function CopilotPage() {
       ref={mainContainerRef}
       className="min-h-screen bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-4 md:p-8"
     >
-      <div className="max-w-6xl mx-auto">
-        <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+      <div className="max-w-screen-xl mx-auto">
+        <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 sticky top-0 bg-white/70 backdrop-blur z-10 p-4 rounded-b-lg shadow">
           <div>
             <div className="flex items-center">
               <Rocket className="h-8 w-8 text-indigo-600 mr-2" />
@@ -834,14 +775,14 @@ export default function CopilotPage() {
         )}
 
         {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
           {/* Left Column - Screen Sharing */}
-          <div className="lg:col-span-4">
+          <div className="xl:col-span-3">
             {/* Meeting Status Card */}
             <Card className="overflow-hidden border-0 shadow-lg bg-white rounded-xl">
               <CardHeader className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
                 <CardTitle className="flex items-center justify-between">
-                  <span>{isSimulationMode ? "Simulation Mode" : "Interview Status"}</span>
+                  <span>Interview Status</span>
                   {isTranscribing && getConnectionStatusBadge()}
                 </CardTitle>
               </CardHeader>
@@ -872,25 +813,12 @@ export default function CopilotPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {isSimulationMode ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                        <div className="flex items-center text-amber-800 mb-2">
-                          <AlertTriangle className="h-5 w-5 mr-2 text-amber-500" />
-                          <h3 className="font-medium">Simulation Mode Active</h3>
-                        </div>
-                        <p className="text-sm text-amber-700">
-                          Screen sharing is not available in this environment. Running in simulation mode with
-                          auto-generated interview questions.
-                        </p>
+                    <div className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md">
+                      <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
+                      <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
+                        Preview
                       </div>
-                    ) : (
-                      <div className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md">
-                        <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
-                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
-                          Preview
-                        </div>
-                      </div>
-                    )}
+                    </div>
 
                     {/* Meeting Info */}
                     <div className="bg-gray-50 rounded-lg p-3">
@@ -928,7 +856,7 @@ export default function CopilotPage() {
                         onClick={stopScreenShare}
                         className="bg-rose-500 hover:bg-rose-600"
                       >
-                        <StopCircle className="mr-2 h-4 w-4" /> {isSimulationMode ? "End Simulation" : "End Interview"}
+                        <StopCircle className="mr-2 h-4 w-4" /> End Interview
                       </Button>
                     </div>
                   </div>
@@ -1010,7 +938,7 @@ export default function CopilotPage() {
           </div>
 
           {/* Right Column - Conversation Display */}
-          <div className="lg:col-span-8">
+          <div className="xl:col-span-9">
             <div className="h-full">
               <ConversationDisplay
                 meetingId="standalone"
@@ -1019,7 +947,6 @@ export default function CopilotPage() {
                 isTranscribing={isTranscribing}
                 currentTranscript={transcript}
                 timeUntilNextProcess={timeUntilNextProcess}
-                isSimulationMode={isSimulationMode}
               />
             </div>
           </div>

@@ -21,7 +21,6 @@ interface ConversationDisplayProps {
   isTranscribing: boolean
   currentTranscript: string
   timeUntilNextProcess: number
-  isSimulationMode?: boolean
 }
 
 export default function ConversationDisplay({
@@ -31,17 +30,20 @@ export default function ConversationDisplay({
   isTranscribing,
   currentTranscript,
   timeUntilNextProcess,
-  isSimulationMode = false,
 }: ConversationDisplayProps) {
   const [activeTab, setActiveTab] = useState("conversation")
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Scroll to bottom when new messages are added
+  // Scroll to bottom while a response is generating or transcribing
   useEffect(() => {
-    if (messagesEndRef.current) {
+    const last = messages[messages.length - 1]
+    if (
+      messagesEndRef.current &&
+      (last?.isProcessing || (isTranscribing && currentTranscript))
+    ) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
-  }, [messages])
+  }, [messages, isTranscribing, currentTranscript])
 
   // Format timestamp
   const formatTime = (date: Date) => {
@@ -60,15 +62,13 @@ export default function ConversationDisplay({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0 h-[calc(100%-60px)] overflow-hidden">
-        <div className="h-full overflow-y-auto p-4">
+        <div className="h-full overflow-y-auto p-4 scroll-smooth">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center text-gray-500 p-6">
               <Bot className="h-16 w-16 text-indigo-200 mb-4" />
               <h3 className="text-xl font-medium text-gray-700 mb-2">Your Interview Assistant</h3>
               <p className="max-w-md">
-                {isSimulationMode
-                  ? "Simulation mode is active. Questions will be generated automatically."
-                  : "Share your screen with audio to start the interview. I'll transcribe the conversation and provide helpful responses."}
+                Share your screen with audio to start the interview. I'll transcribe the conversation and provide helpful responses.
               </p>
             </div>
           ) : (

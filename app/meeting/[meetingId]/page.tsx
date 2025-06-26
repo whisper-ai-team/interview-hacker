@@ -112,8 +112,6 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
   const [timeUntilNextProcess, setTimeUntilNextProcess] = useState(30000)
   const processingTimerRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Add a new state variable for simulation mode
-  const [isSimulationMode, setIsSimulationMode] = useState(false)
 
   // Add a state for participant count (simulated)
   const [participantCount, setParticipantCount] = useState(1)
@@ -465,7 +463,6 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
 
         setSelectedScreen(stream)
         setIsScreenSharing(true)
-        setIsSimulationMode(false)
 
         // Listen for the end of screen sharing
         stream.getVideoTracks()[0].addEventListener("ended", () => {
@@ -497,13 +494,12 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
         // Check if this is a permission policy error
         const errorMessage = error instanceof Error ? error.message : String(error)
         if (errorMessage.includes("permissions policy") || errorMessage.includes("Permission denied")) {
-          addDebugLog("Screen sharing permission denied. Using simulation mode.")
+          addDebugLog("Screen sharing permission denied.")
 
-          // Enable fallback/simulation mode
+          // Enable fallback mode
           setUseFallbackMode(true)
 
-          // Create a simulated screen sharing session
-          startSimulatedSession()
+          setError("Screen sharing is not permitted in this environment.")
         } else {
           // For other errors, show the error message
           setError(`Could not start screen sharing: ${errorMessage}`)
@@ -519,60 +515,6 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
   }
 
   // Add a new function to simulate a screen sharing session
-  const startSimulatedSession = () => {
-    addDebugLog("Starting simulated interview session")
-
-    // Set UI state as if we're screen sharing
-    setIsScreenSharing(true)
-    setConnectionStatus("connected")
-    setIsSimulationMode(true)
-    setIsStartingScreenShare(false)
-
-    // Simulate 2-4 participants
-    const randomParticipants = Math.floor(Math.random() * 3) + 2
-    setParticipantCount(randomParticipants)
-
-    // Create a simulated transcript after a short delay
-    setTimeout(() => {
-      const simulatedTranscript = "Tell me about a time when you had to deal with a difficult team member or colleague."
-      handleTranscript(simulatedTranscript)
-
-      // Process the simulated transcript
-      handleRollingTranscript(simulatedTranscript)
-
-      addDebugLog("Simulated transcript generated")
-    }, 2000)
-
-    // Set up an interval to simulate more transcript segments
-    const interviewInterval = setInterval(() => {
-      // Only add a new transcript if we're still in simulation mode
-      if (isScreenSharing && isSimulationMode) {
-        const simulatedTranscripts = [
-          "How do you prioritize your work when you have multiple deadlines?",
-          "Can you describe a situation where you had to learn a new technology quickly?",
-          "What's your approach to solving complex problems?",
-          "Tell me about a project where you had to work with limited resources.",
-          "How do you handle feedback, especially when it's critical?",
-          "What strategies do you use to maintain work-life balance?",
-          "Describe a situation where you had to make a difficult decision with incomplete information.",
-        ]
-
-        const randomTranscript = simulatedTranscripts[Math.floor(Math.random() * simulatedTranscripts.length)]
-        handleTranscript(randomTranscript)
-
-        // Process the simulated transcript
-        handleRollingTranscript(randomTranscript)
-
-        addDebugLog("New simulated transcript generated")
-      } else {
-        // Clear the interval if we're no longer in simulation mode
-        clearInterval(interviewInterval)
-      }
-    }, 30000) // New transcript every 30 seconds
-
-    // Store the interval ID so we can clear it when stopping
-    processingTimerRef.current = interviewInterval
-  }
 
   // Stop screen sharing
   const stopScreenShare = () => {
@@ -582,11 +524,10 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
     }
 
     setIsScreenSharing(false)
-    setIsSimulationMode(false)
     setParticipantCount(1)
     stopTranscription()
 
-    // Clear any simulation timers
+    // Clear any timers
     if (processingTimerRef.current) {
       clearInterval(processingTimerRef.current)
       processingTimerRef.current = null
@@ -848,17 +789,17 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                       {useFallbackMode ? (
                         <>
                           <Sparkles className="h-4 w-4 mr-1.5" />
-                          Simulation Mode
+                          Fallback Mode
                         </>
                       ) : (
-                        "Enable Simulation"
+                        "Enable Fallback"
                       )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">
                     {useFallbackMode
-                      ? "Currently running in simulation mode with auto-generated questions"
-                      : "Use simulation mode when screen sharing is not available"}
+                      ? "Fallback mode is active"
+                      : "Use fallback mode when screen sharing is not available"}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -993,7 +934,7 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                             className="bg-white hover:bg-gray-50"
                           >
                             <Sparkles className="h-4 w-4 mr-2" />
-                            Enable Simulation Mode
+                            Enable Fallback Mode
                           </Button>
                         </div>
                       )}
@@ -1050,17 +991,8 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                 <CardHeader className="bg-gradient-to-br from-primary to-purple-600 text-white pb-4">
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center">
-                      {isSimulationMode ? (
-                        <>
-                          <Sparkles className="h-5 w-5 mr-2 animate-pulse" />
-                          Simulation Mode
-                        </>
-                      ) : (
-                        <>
-                          <Rocket className="h-5 w-5 mr-2" />
-                          Interview Status
-                        </>
-                      )}
+                      <Rocket className="h-5 w-5 mr-2" />
+                      Interview Status
                     </span>
                     {isTranscribing && getConnectionStatusBadge()}
                   </CardTitle>
@@ -1102,37 +1034,17 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                     </motion.div>
                   ) : (
                     <div className="space-y-4">
-                      {isSimulationMode ? (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.5 }}
-                          className="bg-amber-50 border border-amber-200 rounded-lg p-4"
-                        >
-                          <div className="flex items-center text-amber-800 mb-2">
-                            <div className="bg-amber-100 rounded-full p-1 mr-2">
-                              <Sparkles className="h-4 w-4 text-amber-600" />
-                            </div>
-                            <h3 className="font-medium">Simulation Mode Active</h3>
-                          </div>
-                          <p className="text-sm text-amber-700">
-                            Screen sharing is not available in this environment. Running in simulation mode with
-                            auto-generated interview questions.
-                          </p>
-                        </motion.div>
-                      ) : (
-                        <motion.div
-                          initial={{ opacity: 0, y: 20 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.5 }}
-                          className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md"
-                        >
-                          <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
-                          <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
-                            Preview
-                          </div>
-                        </motion.div>
-                      )}
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="relative bg-black rounded-xl overflow-hidden aspect-video shadow-md"
+                      >
+                        <video ref={videoRef} autoPlay muted className="w-full h-full object-contain" />
+                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded-md">
+                          Preview
+                        </div>
+                      </motion.div>
 
                       {/* Meeting Info */}
                       <motion.div
@@ -1184,8 +1096,7 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                           onClick={stopScreenShare}
                           className="bg-gradient-to-br from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 shadow-md"
                         >
-                          <StopCircle className="mr-2 h-4 w-4" />{" "}
-                          {isSimulationMode ? "End Simulation" : "End Interview"}
+                          <StopCircle className="mr-2 h-4 w-4" /> End Interview
                         </Button>
                       </div>
                     </div>
@@ -1300,7 +1211,6 @@ export default function MeetingPage({ params }: { params: { meetingId: string } 
                 isTranscribing={isTranscribing}
                 currentTranscript={transcript}
                 timeUntilNextProcess={timeUntilNextProcess}
-                isSimulationMode={isSimulationMode}
               />
             </div>
           </motion.div>
