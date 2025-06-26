@@ -20,7 +20,6 @@ export interface ConversationDisplayProps {
   isTranscribing: boolean
   currentTranscript: string | null
   timeUntilNextProcess?: number
-  isSimulationMode?: boolean
 }
 
 export function ConversationDisplay({
@@ -29,7 +28,6 @@ export function ConversationDisplay({
   isTranscribing,
   currentTranscript,
   timeUntilNextProcess,
-  isSimulationMode,
 }: ConversationDisplayProps) {
   // Format seconds for display
   const formatTime = (ms: number) => {
@@ -61,11 +59,6 @@ export function ConversationDisplay({
             </Badge>
           )}
         </h2>
-        {isSimulationMode && (
-          <div className="mt-2 text-xs bg-white/20 p-2 rounded">
-            Running in simulation mode. Screen sharing is not available in this environment.
-          </div>
-        )}
       </div>
 
       <div className="flex-1 bg-white border border-gray-100 rounded-b-xl shadow-lg overflow-hidden">
@@ -75,9 +68,7 @@ export function ConversationDisplay({
               <div className="max-w-md">
                 <h3 className="text-lg font-medium text-gray-700 mb-2">No conversation yet</h3>
                 <p className="text-gray-500">
-                  {isSimulationMode
-                    ? "Simulation mode will generate meeting content automatically."
-                    : "Start screen sharing with audio to begin transcribing and generating responses."}
+                  Start screen sharing with audio to begin transcribing and generating responses.
                 </p>
               </div>
             </div>

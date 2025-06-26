@@ -22,7 +22,6 @@ interface ConversationDisplayProps {
   isTranscribing: boolean
   currentTranscript: string
   timeUntilNextProcess: number
-  isSimulationMode?: boolean
 }
 
 export default function ConversationDisplay({
@@ -32,7 +31,6 @@ export default function ConversationDisplay({
   isTranscribing,
   currentTranscript,
   timeUntilNextProcess,
-  isSimulationMode = false,
 }: ConversationDisplayProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -73,9 +71,7 @@ export default function ConversationDisplay({
                 <Bot className="h-16 w-16 text-indigo-200 mb-4" />
                 <h3 className="text-xl font-medium text-gray-700 mb-2">Your Interview Assistant</h3>
                 <p className="max-w-md">
-                  {isSimulationMode
-                    ? "Simulation mode is active. Questions will be generated automatically."
-                    : "Share your screen with audio to start the interview. I'll transcribe the conversation and provide helpful responses."}
+                  Share your screen with audio to start the interview. I'll transcribe the conversation and provide helpful responses.
                 </p>
               </div>
             ) : (
