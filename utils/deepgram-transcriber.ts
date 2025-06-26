@@ -25,9 +25,16 @@ export class DeepgramTranscriber {
   private onRollingTranscriptCallback: ((text: string) => void) | null = null
   private processingTimer: NodeJS.Timeout | null = null
 
-  constructor(apiKey: string) {
-    this.apiKey = 'd37999dce238f3eccce433130eca53124de90926'
-    console.log("[Deepgram] Initialized with API key:", apiKey ? "API key provided" : "No API key")
+  constructor(apiKey: string = '') {
+    this.apiKey =
+      apiKey ||
+      (typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY || '' : '')
+
+    const hasKey = this.apiKey && this.apiKey !== ''
+    console.log(
+      "[Deepgram] Initialized with API key:",
+      hasKey ? "API key provided" : "No API key"
+    )
   }
 
   setRollingTranscriptCallback(callback: (text: string) => void) {
